@@ -1,0 +1,44 @@
+
+<?xml version="1.0" encoding="utf-8"?>
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:paddingLeft="16dp"
+    android:paddingRight="16dp"
+    android:orientation="vertical">
+  
+  <com.joanzapata.pdfview.PDFView
+      android:id="@+id/pdfviewView"
+      android:layout_width="match_parent"
+      android:layout_height="0dp"
+      android:layout_weight=".90"
+/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight=".10"
+>
+
+  <Button
+      android:id="@+id/stopButtonView"
+      android:text="@string/stopButton"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight=".5"
+      android:enabled="false"
+/>
+
+<Button
+      android:id="@+id/playbackButtonView"
+      android:text="@string/playbackButton"
+      android:layout_width="0dp"
+      android:layout_height="wrap_content"
+      android:layout_weight=".5"
+      android:enabled="false"
+/>
+
+</LinearLayout>
+
+</LinearLayout>
