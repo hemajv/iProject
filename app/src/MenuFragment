@@ -1,0 +1,66 @@
+package com.csun.comp380.presentation_app;
+
+import android.app.Activity;
+import android.os.Bundle;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentActivity;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.ImageView;
+
+public class MenuFragment extends Fragment {
+
+    private FragmentActivity fragmentActivity;
+    private ActivityInterface activityInterface;
+
+    @Override
+    public void onAttach(Activity activity) {
+        fragmentActivity = (FragmentActivity) activity;
+        activityInterface = (ActivityInterface) activity;
+        super.onAttach(activity);
+
+    }
+
+    @Override
+    public void onResume() {
+        activityInterface.setActionBarTitle(getActivity().getString(R.string.app_name));
+        super.onResume();
+    }
+
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                             Bundle savedInstanceState) {
+        // Inflate the layout for this fragment
+        View rootView = inflater.inflate(R.layout.fragment_menu, container, false);
+
+        ImageView recordButton = (ImageView) rootView.findViewById(R.id.recordMenuButton);
+        recordButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                fragmentActivity.getSupportFragmentManager()
+                    .beginTransaction()
+                    .replace(R.id.container, new PDFRecordFragment())
+                    .addToBackStack(null)
+                    .commit();
+            }
+        });
+
+        Button viewSavedButton = (Button) rootView.findViewById(R.id.viewSavedButton);
+        viewSavedButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                fragmentActivity.getSupportFragmentManager()
+                        .beginTransaction()
+                        .replace(R.id.container, new FileListFragment())
+                        .addToBackStack(null)
+                        .commit();
+            }
+        });
+
+
+
+        return rootView;
+    }
+}
