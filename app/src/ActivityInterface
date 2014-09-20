@@ -1,0 +1,22 @@
+package com.csun.comp380.presentation_app;
+
+import com.google.android.gms.common.api.GoogleApiClient;
+import java.io.File;
+import java.util.Date;
+
+/**
+* Interface to allow fragments to access the underlying activity
+*/
+
+    public interface ActivityInterface {
+    
+      public GoogleApiClient getGoogleApiClient();
+      public boolean isGoogleDriveConnected();
+      public void toggleButton(int id, boolean enabled);
+      public void setActionBarTitle(String title);
+      public void resetPDFForPlayback(int id);
+      public void enableSwiping(int id);
+      public void gotoSlideNumber(int id, int slideNumber);
+      public void createPresentation(final String name, String pdfFilePath, String audioFilePath);
+}
+
