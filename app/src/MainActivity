@@ -1,0 +1,400 @@
+package com.csun.comp380.presentation_app;
+
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentSender;
+import android.os.Bundle;
+import android.support.v4.app.Fragment;
+import android.support.v4.widget.DrawerLayout;
+import android.support.v7.app.ActionBar;
+import android.support.v7.app.ActionBarActivity;
+import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.widget.Button;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GooglePlayServicesUtil;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.drive.*;
+import com.joanzapata.pdfview.PDFView;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+
+
+public class MainActivity
+        extends ActionBarActivity
+        implements ActivityInterface, NavigationDrawerFragment.NavigationDrawerCallbacks,
+            GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener{
+    private static final String TAG = "com.csun.comp380.presentation_app.PDFActivity";
+    private static final int RESOLVE_CONNECTION_REQUEST_CODE = 2;
+    /**
+     * Fragment managing the behaviors, interactions and presentation of the navigation drawer.
+     */
+    private NavigationDrawerFragment mNavigationDrawerFragment;
+    private CharSequence mTitle;
+    private GoogleApiClient mGoogleApiClient;
+    private boolean isGoogleDriveConnected;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        mGoogleApiClient = new GoogleApiClient.Builder(this)
+                .addApi(Drive.API)
+                .addScope(Drive.SCOPE_FILE)
+                .addScope(Drive.SCOPE_APPFOLDER)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .build();
+
+        if (savedInstanceState == null) {
+            getSupportFragmentManager().beginTransaction()
+                    .add(R.id.container, new MenuFragment())
+                    .commit();
+        }
+
+        mNavigationDrawerFragment = (NavigationDrawerFragment)
+                getSupportFragmentManager().findFragmentById(R.id.navigation_drawer);
+        mTitle = getTitle();
+
+        // Set up the drawer.
+        mNavigationDrawerFragment.setUp(
+                R.id.navigation_drawer,
+                (DrawerLayout) findViewById(R.id.drawer_layout));
+    }
+
+    @Override
+    protected void onPause() {
+        //if(mGoogleApiClient.isConnected()) {
+        //    mGoogleApiClient.disconnect();
+        //}
+        super.onPause();
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        mGoogleApiClient.connect();
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        
+        // Inflate the menu; this adds items to the action bar if it is present.
+        getMenuInflater().inflate(R.menu.pdf_menu, menu);
+        return true;
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        // Handle action bar item clicks here. The action bar will
+        // automatically handle clicks on the Home/Up button, so long
+        // as you specify a parent activity in AndroidManifest.xml.
+        int id = item.getItemId();
+        Log.i(TAG, "Item: " + item.getItemId());
+        switch(id) {
+            case R.id.action_settings:
+                return true;
+
+
+        }
+        return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        switch (requestCode) {
+            case RESOLVE_CONNECTION_REQUEST_CODE:
+                if (resultCode == RESULT_OK) {
+                    mGoogleApiClient.connect();
+                }
+                break;
+            default:
+                super.onActivityResult(requestCode, resultCode, data);
+        }
+    }
+
+    public void gotoSlideNumber(int id, int slideNumber) {
+        PDFView pdfView = (PDFView) findViewById(id);
+        if (pdfView != null) {
+            pdfView.jumpTo(slideNumber);
+        }
+    }
+
+    public void enableSwiping(int id) {
+        PDFView pdfView = (PDFView) findViewById(id);
+        pdfView.enableSwipe(true);
+    }
+
+    public void resetPDFForPlayback(int id) {
+        PDFView pdfView = (PDFView) findViewById(id);
+        pdfView.enableSwipe(false);
+        pdfView.resetZoom();
+    }
+
+    // All the PDFRecordFragment.PDFFragmentCallback stuff
+    public void toggleButton(int id, boolean enabled) {
+        Button button = (Button) findViewById(id);
+        button.setEnabled(enabled);
+    }
+
+    public void setActionBarTitle(String title){
+        ActionBar actionBar = getSupportActionBar();
+        actionBar.setTitle(title);
+    }
+
+    public void createPresentation(final String name, final String pdfFilePath, final String audioFilePath) {
+        createPDF(name, pdfFilePath);
+        createAudio(name, audioFilePath);
+    }
+
+    public void createAudio(final String name, final String audioFilePath) {
+        final ResultCallback<DriveFolder.DriveFileResult> fileCallbackAudio = new
+                ResultCallback<DriveFolder.DriveFileResult>() {
+                    @Override
+                    public void onResult(DriveFolder.DriveFileResult result) {
+                        if (!result.getStatus().isSuccess()) {
+                            Log.e(TAG, "Error while trying to create the file");
+                            return;
+                        }
+
+                        Log.i(TAG, "[Audio] Created a file in App Folder: "
+                                + result.getDriveFile().getDriveId());
+
+                        DriveFile driveFile = result.getDriveFile();
+                        class WriteContentsAsyncTask extends ApiClientAsyncTask<DriveFile, Void, Boolean> {
+
+                            private static final String TAG = "EditContentsAsyncTask";
+
+                            public WriteContentsAsyncTask(Context context) {
+                                super(context);
+                            }
+
+                            @Override
+                            protected Boolean doInBackgroundConnected(DriveFile... args) {
+                                DriveFile file = args[0];
+                                try {
+                                    DriveApi.ContentsResult contentsResult = file.openContents(
+                                            getGoogleApiClient(), DriveFile.MODE_WRITE_ONLY, null).await();
+                                    if (!contentsResult.getStatus().isSuccess()) {
+                                        return false;
+                                    }
+                                    OutputStream outputStream = contentsResult.getContents().getOutputStream();
+                                    File audioFile = new File(audioFilePath);
+                                    byte[] buffer = new byte[(int) audioFile.length()];
+                                    FileInputStream fileInputStream = new FileInputStream(audioFile);
+                                    int bytesRead;
+                                    while ((bytesRead = fileInputStream.read(buffer)) != -1)
+                                    {
+                                        outputStream.write(buffer, 0, bytesRead);
+                                    }
+                                    //outputStream.write("Hello world".getBytes());
+
+
+
+                                    com.google.android.gms.common.api.Status status = file.commitAndCloseContents(
+                                            getGoogleApiClient(), contentsResult.getContents()).await();
+                                    return status.getStatus().isSuccess();
+                                } catch (IOException e) {
+                                    Log.e(TAG, "IOException while appending to the output stream", e);
+                                }
+                                return false;
+                            }
+
+                            @Override
+                            protected void onPostExecute(Boolean result) {
+                                if (!result) {
+                                    Log.e(TAG, "Error while editing contents");
+                                    return;
+                                }
+                                Log.e(TAG, "Successfully edited contents");
+                            }
+                        }
+
+                        new WriteContentsAsyncTask(MainActivity.this).execute(driveFile);
+                    }
+                };
+
+        final ResultCallback<DriveApi.ContentsResult> contentsCallbackAudio = new
+                ResultCallback<DriveApi.ContentsResult>() {
+                    @Override
+                    public void onResult(DriveApi.ContentsResult result) {
+                        if (!result.getStatus().isSuccess()) {
+                            Log.e(TAG, "Error while trying to create new file contents");
+                            return;
+                        }
+
+                        MetadataChangeSet changeSetFileAudio = new MetadataChangeSet.Builder()
+                                .setTitle(name + ".3gp")
+                                .setMimeType("audio/3gpp")
+                                .build();
+
+                        Drive.DriveApi.getAppFolder(mGoogleApiClient)
+                                .createFile(mGoogleApiClient, changeSetFileAudio, result.getContents())
+                                .setResultCallback(fileCallbackAudio);
+                    }
+                };
+
+        Drive.DriveApi.newContents(mGoogleApiClient)
+                .setResultCallback(contentsCallbackAudio);
+    }
+
+    public void createPDF(final String name, final String pdfFilePath) {
+
+        final ResultCallback<DriveFolder.DriveFileResult> fileCallbackPDF = new
+                ResultCallback<DriveFolder.DriveFileResult>() {
+                    @Override
+                    public void onResult(DriveFolder.DriveFileResult result) {
+                        if (!result.getStatus().isSuccess()) {
+                            Log.e(TAG, "Error while trying to create the file");
+                            return;
+                        }
+
+                        Log.i(TAG, "[PDF] Created a file in App Folder: "
+                                + result.getDriveFile().getDriveId());
+
+                        DriveFile driveFile = result.getDriveFile();
+                        class WriteContentsAsyncTask extends ApiClientAsyncTask<DriveFile, Void, Boolean> {
+
+                            private static final String TAG = "EditContentsAsyncTask";
+
+                            public WriteContentsAsyncTask(Context context) {
+                                super(context);
+                            }
+
+                            @Override
+                            protected Boolean doInBackgroundConnected(DriveFile... args) {
+                                DriveFile file = args[0];
+                                try {
+                                    DriveApi.ContentsResult contentsResult = file.openContents(
+                                            getGoogleApiClient(), DriveFile.MODE_WRITE_ONLY, null).await();
+                                    if (!contentsResult.getStatus().isSuccess()) {
+                                        return false;
+                                    }
+                                    OutputStream outputStream = contentsResult.getContents().getOutputStream();
+                                    File pdfFile = new File(pdfFilePath);
+
+                                    byte[] buffer = new byte[(int) pdfFile.length()];
+                                    FileInputStream fileInputStream = new FileInputStream(pdfFile);
+                                    int bytesRead;
+                                    while ((bytesRead = fileInputStream.read(buffer)) != -1)
+                                    {
+                                        outputStream.write(buffer, 0, bytesRead);
+                                    }
+                                    //outputStream.write("Hello world".getBytes());
+
+
+
+                                    com.google.android.gms.common.api.Status status = file.commitAndCloseContents(
+                                            getGoogleApiClient(), contentsResult.getContents()).await();
+                                    return status.getStatus().isSuccess();
+                                } catch (IOException e) {
+                                    Log.e(TAG, "IOException while appending to the output stream", e);
+                                }
+                                return false;
+                            }
+
+                            @Override
+                            protected void onPostExecute(Boolean result) {
+                                if (!result) {
+                                    Log.e(TAG, "Error while editing contents");
+                                    return;
+                                }
+                                Log.e(TAG, "Successfully edited contents");
+                            }
+                        }
+
+                        new WriteContentsAsyncTask(MainActivity.this).execute(driveFile);
+                    }
+                };
+
+        final ResultCallback<DriveApi.ContentsResult> contentsCallbackPDF = new
+                ResultCallback<DriveApi.ContentsResult>() {
+                    @Override
+                    public void onResult(DriveApi.ContentsResult result) {
+                        if (!result.getStatus().isSuccess()) {
+                            Log.e(TAG, "Error while trying to create new file contents");
+                            return;
+                        }
+
+                        MetadataChangeSet changeSetFilePDF = new MetadataChangeSet.Builder()
+                                .setTitle(name + ".pdf")
+                                .setMimeType("application/pdf")
+                                .build();
+
+                        Drive.DriveApi.getAppFolder(mGoogleApiClient)
+                                .createFile(mGoogleApiClient, changeSetFilePDF, result.getContents())
+                                .setResultCallback(fileCallbackPDF);
+                    }
+                };
+
+        Drive.DriveApi.newContents(mGoogleApiClient)
+                .setResultCallback(contentsCallbackPDF);
+
+    }
+
+    public GoogleApiClient getGoogleApiClient() {
+        return mGoogleApiClient;
+    }
+
+    @Override
+    public void onNavigationDrawerItemSelected(int position) {
+        Fragment selectedFragment = null;
+        switch(position) {
+            case 0:
+                selectedFragment = new MenuFragment();
+                break;
+            case 1:
+                selectedFragment = new PDFRecordFragment();
+                break;
+            case 2:
+                selectedFragment = new FileListFragment();
+                break;
+            default:
+                Log.i(TAG, "Invalid selection");
+                break;
+
+        }
+        if(selectedFragment != null) {
+            getSupportFragmentManager()
+                    .beginTransaction()
+                    .replace(R.id.container, selectedFragment)
+                    .addToBackStack(null)
+                    .commit();
+        }
+    }
+
+    @Override
+    public void onConnected(Bundle bundle) {
+        Log.i(TAG, "Connected to google drive");
+
+        isGoogleDriveConnected = true;
+    }
+
+    @Override
+    public void onConnectionSuspended(int i) {
+
+    }
+
+    @Override
+    public void onConnectionFailed(ConnectionResult connectionResult) {
+        if (connectionResult.hasResolution()) {
+            try {
+                connectionResult.startResolutionForResult(this, RESOLVE_CONNECTION_REQUEST_CODE);
+            } catch (IntentSender.SendIntentException e) {
+                // Unable to resolve, message user appropriately
+            }
+        } else {
+            GooglePlayServicesUtil.getErrorDialog(connectionResult.getErrorCode(), this, 0).show();
+        }
+    }
+
+    public boolean isGoogleDriveConnected() {
+        return isGoogleDriveConnected;
+    }
+}
