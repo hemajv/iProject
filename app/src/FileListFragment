@@ -1,0 +1,139 @@
+package com.csun.comp380.presentation_app;
+
+import android.app.Activity;
+import android.os.Bundle;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentActivity;
+import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.*;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.drive.Drive;
+import com.google.android.gms.drive.DriveApi;
+import com.google.android.gms.drive.Metadata;
+import com.google.android.gms.drive.query.Filters;
+import com.google.android.gms.drive.query.Query;
+import com.google.android.gms.drive.query.SearchableField;
+import com.google.android.gms.drive.widget.DataBufferAdapter;
+
+import java.util.logging.Filter;
+
+public class FileListFragment extends Fragment{
+
+    private static final String TAG = "com.csun.comp380.presentation_app.FileListFragment";
+    private FragmentActivity fragmentActivity;
+    private ActivityInterface googleActivity;
+    private ListView listView;
+    private DataBufferAdapter<Metadata> resultsAdapter;
+    private String nextPageToken;
+    private boolean hasMore;
+
+    @Override
+    public void onAttach(Activity activity) {
+        fragmentActivity = (FragmentActivity) activity;
+        googleActivity = (ActivityInterface) activity;
+        super.onAttach(activity);
+
+    }
+
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                             Bundle savedInstanceState) {
+        if(!googleActivity.isGoogleDriveConnected()) {
+            googleActivity.getGoogleApiClient().connect();
+        }
+
+        // Inflate the layout for this fragment
+        View rootView = inflater.inflate(R.layout.fragment_filelist, container, false);
+
+        hasMore = true;
+        listView = (ListView) rootView.findViewById(R.id.fileListView);
+        resultsAdapter = new ResultsAdapter(rootView.getContext());
+        listView.setAdapter(resultsAdapter);
+        listView.setOnScrollListener(new AbsListView.OnScrollListener() {
+            @Override
+            public void onScrollStateChanged(AbsListView view, int scrollState) {
+
+            }
+
+            @Override
+            public void onScroll(AbsListView view, int firstVisibleItem, int visibleItemCount, int totalItemCount) {
+                if(nextPageToken != null && firstVisibleItem + visibleItemCount + 5 < totalItemCount) {
+                    retrieveNextPage();
+                }
+            }
+        });
+
+        listView.setOnItemClickListener(new AdapterView.OnItemClickListener() {
+            @Override
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                String item = ((TextView) view).getText().toString();
+
+                Toast.makeText(fragmentActivity, item, Toast.LENGTH_LONG).show();
+
+                Bundle bundle = new Bundle();
+                bundle.putString("name", item);
+                PDFViewFragment pdfViewFragment = new PDFViewFragment();
+                pdfViewFragment.setArguments(bundle);
+
+                fragmentActivity.getSupportFragmentManager()
+                        .beginTransaction()
+                        .replace(R.id.container, pdfViewFragment)
+                        .addToBackStack(null)
+                        .commit();
+            }
+        });
+
+        retrieveNextPage();
+
+        return rootView;
+    }
+
+    private void retrieveNextPage() {
+        Log.i(TAG, "page retrieved");
+        if(!googleActivity.getGoogleApiClient().isConnected()) {
+            Log.e(TAG, "NOT CONNECTED");
+        }
+        // if there are no more results to retrieve,
+        // return silently.
+        if (!hasMore) {
+            return;
+        }
+        // retrieve the results for the next page.
+        Query query = new Query.Builder()
+                .addFilter(Filters.eq(SearchableField.MIME_TYPE, "application/pdf"))
+                .setPageToken(nextPageToken)
+                .build();
+        Drive.DriveApi.query(googleActivity.getGoogleApiClient(), query)
+            .setResultCallback(metadataBufferCallback);
+    }
+
+    /**
+     * Appends the retrieved results to the result buffer.
+     */
+    private final ResultCallback<DriveApi.MetadataBufferResult> metadataBufferCallback = new
+            ResultCallback<DriveApi.MetadataBufferResult>() {
+                @Override
+                public void onResult(DriveApi.MetadataBufferResult result) {
+                    if (!result.getStatus().isSuccess()) {
+                        Log.e(TAG, "Problem while retrieving files");
+                        return;
+                    }
+                    resultsAdapter.append(result.getMetadataBuffer());
+                    nextPageToken = result.getMetadataBuffer().getNextPageToken();
+                    hasMore = nextPageToken != null;
+                }
+            };
+
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        resultsAdapter.clear();
+    }
+
+
+}
