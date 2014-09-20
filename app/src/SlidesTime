@@ -1,0 +1,27 @@
+package com.csun.comp380.presentation_app;
+
+/**
+ * Class of components of a presentation
+ */
+public class SlideTime {
+    private long delayTime;
+    private int slideNumber;
+
+    public SlideTime(long delayTime, int slideNumber) {
+        this.delayTime = delayTime;
+        this.slideNumber = slideNumber;
+    }
+
+    public int getSlideNumber() {
+        return slideNumber;
+    }
+
+    public long getDelayTime() {
+        return delayTime;
+    }
+
+    @Override
+    public String toString() {
+        return "Delay Time: " + delayTime + "\n" + "SlideNumber: " + slideNumber;
+    }
+}
