@@ -1,0 +1,281 @@
+package com.csun.comp380.presentation_app;
+
+import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
+import android.database.Cursor;
+import android.net.Uri;
+import android.os.Bundle;
+import android.os.Handler;
+import android.provider.MediaStore;
+import android.support.v4.app.Fragment;
+import android.support.v4.app.FragmentActivity;
+import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.Toast;
+import com.joanzapata.pdfview.PDFView;
+import com.joanzapata.pdfview.exception.FileNotFoundException;
+import com.joanzapata.pdfview.listener.OnPageChangeListener;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Date;
+
+
+public class PDFRecordFragment extends Fragment implements OnPageChangeListener {
+
+    public static final int NULL_START_TIME = -1;
+
+    private static final String TAG = "com.csun.comp380.presentation_app." + "PDFRecordFragment";
+    private static final int CHOOSE_FILE = 1;
+
+
+    private ActivityInterface activityCallback;
+    private AudioManager audioManager;
+    private boolean isRecording, isPlaying;
+
+    private ArrayList<SlideTime> slideTimes = new ArrayList<SlideTime>();
+    private long startTime;
+    private Handler playbackHandler = null;
+    private PDFView pdfView;
+    private String selectedPdfPath = null;
+    private FragmentActivity fragmentActivity;
+    private File pdfFile;
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        audioManager = new AudioManager(getActivity().getFilesDir() + "/first.3gp");
+        isRecording = false;
+        isPlaying = false;
+        startTime = NULL_START_TIME;
+        super.onCreate(savedInstanceState);
+    }
+
+    @Override
+    public void onPause() {
+        audioManager.release();
+        // Make sure that the handler does not continue when fragment is paused.
+        if(playbackHandler != null) {
+            playbackHandler.removeCallbacksAndMessages(null);
+        }
+
+        super.onPause();
+    }
+
+
+
+    @Override
+    public void onAttach(Activity activity) {
+        super.onAttach(activity);
+        try {
+            activityCallback = (ActivityInterface) activity;
+            fragmentActivity = (FragmentActivity) activity;
+        } catch (ClassCastException e) {
+            throw new ClassCastException(activity.toString()
+                    + " must implement PDFFragmentCallback");
+        }
+    }
+
+    public String getRealPathFromURI(Context context, Uri contentUri) {
+        Cursor cursor = null;
+        try {
+            String[] proj = { MediaStore.Images.Media.DATA };
+            cursor = context.getContentResolver().query(contentUri,  proj, null, null, null);
+            int column_index = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA);
+            cursor.moveToFirst();
+            return cursor.getString(column_index);
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        switch (requestCode) {
+            case CHOOSE_FILE:
+                if (resultCode == Activity.RESULT_OK) {
+                    Log.i(TAG, "File uri: " + data.getData());
+                    selectedPdfPath = getRealPathFromURI(getActivity(), data.getData());
+                    try {
+                        pdfView.fromFile(new File(selectedPdfPath))
+                              .showMinimap(false)
+                              .enableSwipe(true)
+                              .onPageChange(this)
+                             .load();
+                    } catch (FileNotFoundException e1) {
+                        try {
+                            pdfView.fromFile(pdfFile)
+                                    .showMinimap(false)
+                                    .enableSwipe(true)
+                                    .onPageChange(this)
+                                    .load();
+                        } catch (FileNotFoundException e2) {
+                            throw e2;
+                        }
+                    }
+                }
+                break;
+            default:
+                super.onActivityResult(requestCode, resultCode, data);
+        }
+    }
+
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                             Bundle savedInstanceState) {
+            View rootView = inflater.inflate(R.layout.fragment_pdf, container, false);
+
+
+        // Set up the PDF View and start the sample presentation
+        pdfView = (PDFView) rootView.findViewById(R.id.pdfview);
+
+        // Choose a PDF
+        Intent chooseFile = new Intent(Intent.ACTION_GET_CONTENT);
+        chooseFile.setType("application/pdf");
+        Intent c = Intent.createChooser(chooseFile, "Choose PDF");
+        startActivityForResult(c, CHOOSE_FILE);
+
+        // Set the onclick listeners for the buttons
+        Button recordButton = (Button) rootView.findViewById(R.id.recordButton);
+        recordButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                recordButtonPressed(v);
+            }
+        });
+
+        Button stopButton = (Button) rootView.findViewById(R.id.stopButton);
+        stopButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                stopButtonPressed(v);
+            }
+        });
+
+        Button playbackButton = (Button) rootView.findViewById(R.id.playbackButton);
+        playbackButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                playbackButtonPressed(v);
+            }
+        });
+
+        Button saveButton = (Button) rootView.findViewById(R.id.saveButton);
+        saveButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                saveButtonPressed(v);
+            }
+        });
+
+        return rootView;
+    }
+
+    @Override
+    public void onPageChanged(int page, int pageCount) {
+        Log.i(TAG, "Page: " + page);
+        Log.i(TAG, "PageCount: " + pageCount);
+
+        activityCallback.setActionBarTitle("SlideTime " + page + "/" + pageCount);
+
+        // If app has just started, pageChanged is thrown and will not have a start time.
+        // This is to handle that case
+        long delay;
+        if (startTime == NULL_START_TIME) {
+            delay = 0;
+        }
+        else {
+            delay = System.currentTimeMillis() - startTime;
+        }
+        slideTimes.add(new SlideTime(delay, page));
+
+    }
+
+    private void recordButtonPressed(View view) {
+        Log.i(TAG, "Record Button Pressed");
+
+        activityCallback.toggleButton(R.id.recordButton, false);
+        activityCallback.toggleButton(R.id.stopButton, true);
+
+        audioManager.startRecording();
+        isRecording = true;
+        Toast.makeText(view.getContext(), "Recording Started", Toast.LENGTH_LONG)
+            .show();
+        startTime = System.currentTimeMillis();
+    }
+
+    private void stopButtonPressed(View view) {
+        Log.i(TAG, "Stop Button Pressed");
+
+        activityCallback.toggleButton(R.id.stopButton, false);
+        activityCallback.toggleButton(R.id.playbackButton, true);
+        activityCallback.toggleButton(R.id.saveButton, true);
+
+        String msg = "";
+        if (isPlaying) {
+            audioManager.stopPlaying();
+            isPlaying = false;
+            activityCallback.enableSwiping(R.id.pdfview);
+            msg = "Playback Stopped";
+        }
+        if (isRecording) {
+            audioManager.stopRecording();
+            isRecording = false;
+            msg = "Recording Stopped";
+        }
+        Toast.makeText(view.getContext(), msg, Toast.LENGTH_LONG)
+                .show();
+    }
+
+    private void playbackButtonPressed(View view) {
+        Log.i(TAG, "Playback Button Pressed");
+
+        activityCallback.toggleButton(R.id.stopButton, true);
+        activityCallback.toggleButton(R.id.playbackButton, false);
+
+
+        Toast.makeText(view.getContext(), "Playback Started", Toast.LENGTH_LONG)
+                .show();
+
+        isPlaying = true;
+
+        activityCallback.resetPDFForPlayback(R.id.pdfview);
+
+        audioManager.startPlaying();
+
+        for(final SlideTime slide : slideTimes) {
+            Log.i(TAG, slide.toString());
+
+            playbackHandler = new Handler();
+            playbackHandler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    activityCallback.gotoSlideNumber(R.id.pdfview, slide.getSlideNumber());
+                }
+            }, slide.getDelayTime());
+        }
+    }
+
+    private void saveButtonPressed(View view) {
+        Log.i(TAG, "Save button pressed");
+        Log.i(TAG, "Selected pdf: " + selectedPdfPath);
+
+        String dateString = new Date().toString();
+        activityCallback.createPresentation(dateString, selectedPdfPath, audioManager.getFilePath());
+
+        fragmentActivity.getSupportFragmentManager()
+                .beginTransaction()
+                .replace(R.id.container, new MenuFragment())
+                .addToBackStack(null)
+                .commit();
+
+        Toast.makeText(view.getContext(), "Presentation Saved", Toast.LENGTH_LONG)
+                .show();
+    }
+
+}
