@@ -1,0 +1,276 @@
+package com.csun.comp380.presentation_app;
+
+import android.app.Activity;
+import android.content.Context;
+import android.os.Bundle;
+import android.support.v4.app.Fragment;
+import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.ProgressBar;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.drive.*;
+import com.google.android.gms.drive.query.Filters;
+import com.google.android.gms.drive.query.Query;
+import com.google.android.gms.drive.query.SearchableField;
+import com.joanzapata.pdfview.PDFView;
+import org.apache.commons.io.IOUtils;
+
+import java.io.*;
+
+
+public class PDFViewFragment extends Fragment {
+
+    private static final String TAG = "PDFViewFragment";
+    private String filename;
+    private PDFView pdfView;
+    private ProgressBar progressBar;
+    private ActivityInterface activityInterface;
+    private boolean isPdfReady = false;
+    private boolean isAudioReady = true;
+    private boolean isTimeReady = true;
+    private Button stopButton;
+    private Button playButton;
+    private AudioManager audioManager;
+
+    @Override
+    public void onAttach(Activity activity) {
+        activityInterface = (ActivityInterface) activity;
+        super.onAttach(activity);
+    }
+
+    @Override
+    public void onPause() {
+        if(audioManager != null) {
+            audioManager.release();
+        }
+        super.onPause();
+    }
+
+    private void playButtonPressed(View v) {
+        if(audioManager != null) {
+            audioManager.startPlaying();
+        }
+    }
+
+    private void stopButtonPressed(View v) {
+        if(audioManager != null) {
+            audioManager.stopPlaying();
+        }
+    }
+
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        View rootView = inflater.inflate(R.layout.fragment_pdfview, container, false);
+        filename = getArguments().getString("name");
+        if(!filename.isEmpty()) {
+            Log.i(TAG, "Received item: " + filename);
+
+            // Select the views
+            pdfView = (PDFView) rootView.findViewById(R.id.pdfviewView);
+            playButton = (Button) rootView.findViewById(R.id.playbackButtonView);
+            playButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    playButtonPressed(v);
+                }
+            });
+            stopButton = (Button) rootView.findViewById(R.id.stopButtonView);
+            stopButton.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    stopButtonPressed(v);
+                }
+            });
+
+            // Query for the pdf corresponding to filename
+            Query pdfQuery = new Query.Builder()
+                    .addFilter(Filters.eq(SearchableField.MIME_TYPE, "application/pdf"))
+                    .addFilter(Filters.eq(SearchableField.TITLE, filename))
+                    .build();
+
+            Query audioQuery = new Query.Builder()
+                    .addFilter(Filters.eq(SearchableField.MIME_TYPE, "audio/3gpp"))
+                    .addFilter(Filters.eq(SearchableField.TITLE, filename))
+                    .build();
+
+            // Execute query and attach callback
+            Drive.DriveApi.query(activityInterface.getGoogleApiClient(), pdfQuery)
+                    .setResultCallback(pdfMetadataBufferCallback);
+
+            Drive.DriveApi.query(activityInterface.getGoogleApiClient(), audioQuery)
+                    .setResultCallback(audioMetadataBufferCallback);
+
+        }
+        return rootView;
+    }
+
+    private void allLoaded() {
+        Log.i(TAG, "All loaded");
+        playButton.setEnabled(true);
+    }
+
+    final private class AudioRetrieveDriveFileContentsAsyncTask
+            extends ApiClientAsyncTask<DriveId, Boolean, byte[]> {
+
+        public AudioRetrieveDriveFileContentsAsyncTask(Context context) {
+            super(context);
+        }
+
+        @Override
+        protected byte[] doInBackgroundConnected(DriveId... params) {
+            byte[] contents = null;
+            DriveFile file = Drive.DriveApi.getFile(getGoogleApiClient(), params[0]);
+            DriveApi.ContentsResult contentsResult =
+                    file.openContents(getGoogleApiClient(), DriveFile.MODE_READ_ONLY, null).await();
+            if (!contentsResult.getStatus().isSuccess()) {
+                return null;
+            }
+
+            InputStream inputStream = contentsResult.getContents().getInputStream();
+            try {
+                byte[] bytes = IOUtils.toByteArray(inputStream);
+                Log.i(TAG, "Number of bytes: " + bytes.length);
+                //contents = new String(bytes, "UTF-8");
+                contents = bytes;
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            file.discardContents(getGoogleApiClient(), contentsResult.getContents()).await();
+            return contents;
+        }
+
+        @Override
+        protected void onPostExecute(byte[] result) {
+            super.onPostExecute(result);
+            if (result == null) {
+                Log.e(TAG, "Error while reading from the file");
+                return;
+            }
+            Log.i(TAG, "File contents: " + result);
+            try {
+
+                if(getActivity().deleteFile("audio.3gp")) {
+                    Log.i(TAG, "Successfully deleted audio.3gp");
+                }
+                String path = getActivity().getFilesDir() + "/audio.3gp";
+                File audioFile = new File(path);
+
+                FileOutputStream fileOutputStream = new FileOutputStream(audioFile);
+                fileOutputStream.write(result);
+                fileOutputStream.close();
+
+                Log.i(TAG, "Audio file saved");
+                audioManager = new AudioManager(path);
+
+                isAudioReady = true;
+                if(isPdfReady && isAudioReady && isTimeReady) {
+                    allLoaded();
+                }
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private final ResultCallback<DriveApi.MetadataBufferResult> audioMetadataBufferCallback = new
+            ResultCallback<DriveApi.MetadataBufferResult>() {
+                @Override
+                public void onResult(DriveApi.MetadataBufferResult result) {
+                    if (!result.getStatus().isSuccess()) {
+                        Log.e(TAG, "Problem while retrieving files");
+                        return;
+                    }
+
+                    for(Metadata metadata : result.getMetadataBuffer()) {
+                        Log.i(TAG, "Title: " + metadata.getTitle());
+                        new AudioRetrieveDriveFileContentsAsyncTask(
+                                getActivity()).execute(metadata.getDriveId());
+                    }
+                }
+            };
+
+
+    final private class PDFRetrieveDriveFileContentsAsyncTask
+            extends ApiClientAsyncTask<DriveId, Boolean, byte[]> {
+
+        public PDFRetrieveDriveFileContentsAsyncTask(Context context) {
+            super(context);
+        }
+
+        @Override
+        protected byte[] doInBackgroundConnected(DriveId... params) {
+            byte[] contents = null;
+            DriveFile file = Drive.DriveApi.getFile(getGoogleApiClient(), params[0]);
+            DriveApi.ContentsResult contentsResult =
+                    file.openContents(getGoogleApiClient(), DriveFile.MODE_READ_ONLY, null).await();
+            if (!contentsResult.getStatus().isSuccess()) {
+                return null;
+            }
+
+            InputStream inputStream = contentsResult.getContents().getInputStream();
+            try {
+                byte[] bytes = IOUtils.toByteArray(inputStream);
+                Log.i(TAG, "Number of bytes: " + bytes.length);
+                contents = bytes;
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            file.discardContents(getGoogleApiClient(), contentsResult.getContents()).await();
+            return contents;
+        }
+
+        @Override
+        protected void onPostExecute(byte[] result) {
+            super.onPostExecute(result);
+            if (result == null) {
+                Log.e(TAG, "Error while reading from the file");
+                return;
+            }
+            Log.i(TAG, "File contents: " + result);
+            try {
+                File pdfFile = new File(getActivity().getFilesDir(), filename);
+
+                FileOutputStream fileOutputStream = new FileOutputStream(pdfFile);
+                fileOutputStream.write(result);
+                fileOutputStream.close();
+
+
+                pdfView.fromFile(pdfFile)
+                    .showMinimap(false)
+                    .enableSwipe(true)
+                    .load();
+
+                isPdfReady = true;
+                if(isPdfReady && isAudioReady && isTimeReady) {
+                    allLoaded();
+                }
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private final ResultCallback<DriveApi.MetadataBufferResult> pdfMetadataBufferCallback = new
+            ResultCallback<DriveApi.MetadataBufferResult>() {
+                @Override
+                public void onResult(DriveApi.MetadataBufferResult result) {
+                    if (!result.getStatus().isSuccess()) {
+                        Log.e(TAG, "Problem while retrieving files");
+                        return;
+                    }
+
+                    for(Metadata metadata : result.getMetadataBuffer()) {
+                        Log.i(TAG, "Title: " + metadata.getTitle());
+                        new PDFRetrieveDriveFileContentsAsyncTask(
+                                getActivity()).execute(metadata.getDriveId());
+                    }
+                }
+            };
+}
