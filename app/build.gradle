@@ -1,0 +1,60 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:0.9.+'
+    }
+}
+apply plugin: 'android'
+
+repositories {
+    mavenCentral()
+    mavenLocal()
+}
+
+
+android {
+    compileSdkVersion 19
+    buildToolsVersion "19.0.1"
+
+    defaultConfig {
+        minSdkVersion 9
+        targetSdkVersion 19
+        versionCode 1
+        versionName "1.0"
+    }
+    buildTypes {
+        release {
+            runProguard false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+        }
+    }
+    sourceSets {
+      main {
+        manifest.srcFile 'AndroidManifest.xml'
+        java.srcDirs = ['src']
+        resources.srcDirs = ['src']
+        renderscript.srcDirs = ['src']
+        res.srcDirs = ['res']
+        assets.srcDirs = ['assets']
+        jniLibs.srcDirs = ['jniLibs']
+      }
+
+      instrumentTest.setRoot('tests')
+      instrumentTest {
+        java.srcDirs = ['tests/src']
+        res.srcDirs = ['tests/res']
+        assets.srcDirs = ['tests/assets']
+        resources.srcDirs = ['tests/src']
+      }
+    }
+}
+
+dependencies {
+    compile 'com.android.support:appcompat-v7:+'
+    compile 'com.android.support:support-v4:+'
+    compile group: 'com.google.android.gms', name:'play-services', version: '4.3.23'
+    compile group: 'com.joanzapata.pdfview', name: 'android-pdfview', version: '1.0.1', ext: 'jar'
+    compile fileTree(dir: 'libs', include: '*.jar')
+}
