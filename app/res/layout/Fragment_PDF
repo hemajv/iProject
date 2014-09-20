@@ -1,0 +1,93 @@
+<!--<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+xmlns:tools="http://schemas.android.com/tools"
+android:layout_width="match_parent"
+android:layout_height="match_parent"
+android:paddingLeft="@dimen/activity_horizontal_margin"
+android:paddingRight="@dimen/activity_horizontal_margin"
+android:paddingTop="@dimen/activity_vertical_margin"
+android:paddingBottom="@dimen/activity_vertical_margin"
+tools:context="com.csun.comp380.presentation_app.PDFActivity$PlaceholderFragment">
+
+<com.joanzapata.pdfview.PDFView
+    android:id="@+id/pdfview"
+    android:layout_width="fill_parent"
+    android:layout_height="0dp"
+    android:layout_weight=".70"
+/>
+
+<Button
+    android:text="Record"
+    android:layout_width="fill_parent"
+    android:layout_height="0dp"
+    android:layout_weight=".30"
+/>
+
+</RelativeLayout>
+
+-->
+
+<LinearLayout
+      xmlns:android="http://schemas.android.com/apk/res/android"
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:paddingLeft="16dp"
+        android:paddingRight="16dp"
+        android:orientation="vertical" >
+
+<com.joanzapata.pdfview.PDFView
+      android:id="@+id/pdfview"
+      android:layout_width="match_parent"
+      android:layout_height="0dp"
+      android:layout_weight=".90"
+/>
+
+<!--<Button
+    android:text="Record"
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    android:layout_weight=".10"
+/>-->
+
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="0dp"
+    android:layout_weight=".10"
+>
+
+<Button
+    android:id="@+id/recordButton"
+    android:text="@string/recordButton"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight=".25"
+/>
+
+<Button
+    android:id="@+id/stopButton"
+    android:text="@string/stopButton"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight=".25"
+    android:enabled="false"
+/>
+
+<Button
+    android:id="@+id/playbackButton"
+    android:text="@string/playbackButton"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:layout_weight=".25"
+    android:enabled="false"
+/>
+
+<Button
+    android:id="@+id/saveButton"
+    android:text="@string/saveButton"
+    android:layout_weight=".25"
+    android:layout_width="0dp"
+    android:layout_height="wrap_content"
+    android:enabled="false"/>
+
+</LinearLayout>
+
+</LinearLayout>
